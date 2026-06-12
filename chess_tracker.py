@@ -41,9 +41,15 @@ class ChessTracker:
         url = f"https://www.chess.com/callback/live/game/{self.game_id}"
         try:
             async with aiohttp.ClientSession() as session:
+                logger.debug(f"Requesting URL: {url}")
                 async with session.get(url, headers=self.headers) as resp:
                     if resp.status != 200:
-                        logger.warning(f"Failed to fetch game state. Status: {resp.status}")
+                        body_snippet = (await resp.text())[:200]
+                        logger.error(f"Failed to fetch game state. URL: {url} | Status: {resp.status} | Body: {body_snippet}")
+                        
+                        if resp.status == 404:
+                            return {"error": "404 Not Found - The game URL might be invalid or the endpoint is deprecated."}
+                            
                         return None
                         
                     data = await resp.json()

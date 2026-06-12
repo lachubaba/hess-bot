@@ -155,6 +155,16 @@ async def poll_game_loop(text_channel):
     if not state:
         return
         
+    if "error" in state:
+        logger.error(f"Tracking stopped due to error: {state['error']}")
+        await text_channel.send(f"❌ Stopped tracking: {state['error']}")
+        is_watching = False
+        poll_game_loop.cancel()
+        audio_player.stop()
+        if text_channel.guild.voice_client:
+            await text_channel.guild.voice_client.disconnect()
+        return
+        
     new_moves = state.get("new_moves", [])
     
     if new_moves:
