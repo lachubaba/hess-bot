@@ -116,6 +116,33 @@ async def set_voice(ctx, voice_name: str):
     else:
         await ctx.send("⚠️ Available voices: `prabhat`, `neerja`")
 
+@bot.command(name='say')
+async def say(ctx, *, message: str):
+    """Speaks the provided message in the voice channel."""
+    if not ctx.author.voice:
+        await ctx.send("Join a voice channel first.")
+        return
+
+    # Join voice channel
+    channel = ctx.author.voice.channel
+    
+    if ctx.voice_client:
+        await ctx.voice_client.move_to(channel)
+        vc = ctx.voice_client
+    else:
+        vc = await channel.connect()
+        
+    audio_player.set_voice_client(vc)
+
+    # Generate Audio
+    audio_path = await generate_speech(message, voice=current_voice)
+    
+    if audio_path:
+        audio_player.add_to_queue(audio_path)
+        await ctx.send(f"🗣️ Saying: {message}")
+    else:
+        await ctx.send("Failed to generate speech.")
+
 @tasks.loop(seconds=3)
 async def poll_game_loop(text_channel):
     """Background loop that polls chess.com and processes new moves."""
