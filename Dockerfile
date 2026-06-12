@@ -4,9 +4,9 @@ FROM python:3.10-slim
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies: FFmpeg (for Discord Voice) and Stockfish (for Chess Engine)
+# Install system dependencies: FFmpeg, Stockfish, and build tools for PyNaCl
 RUN apt-get update && \
-    apt-get install -y ffmpeg stockfish && \
+    apt-get install -y ffmpeg stockfish build-essential libffi-dev python3-dev && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy requirements file first to leverage Docker cache
