@@ -27,6 +27,7 @@ tracker = ChessTracker()
 analyzer = ChessAnalyzer()
 audio_player = AudioPlayer()
 is_watching = False
+current_voice = "en-IN-PrabhatNeural"
 
 @bot.event
 async def on_ready():
@@ -39,7 +40,7 @@ async def watch(ctx, url: str):
     global is_watching
     
     if not ctx.author.voice:
-        await ctx.send("You need to be in a voice channel to use this command!")
+        await ctx.send("Join a voice channel first.")
         return
 
     if is_watching:
@@ -48,16 +49,14 @@ async def watch(ctx, url: str):
 
     # Join voice channel
     channel = ctx.author.voice.channel
-    try:
-        vc = await channel.connect()
-        audio_player.set_voice_client(vc)
-    except discord.ClientException:
-        # Already connected to a voice channel
+    
+    if ctx.voice_client:
+        await ctx.voice_client.move_to(channel)
         vc = ctx.voice_client
-        audio_player.set_voice_client(vc)
-    except Exception as e:
-        await ctx.send(f"Failed to connect to voice channel: {e}")
-        return
+    else:
+        vc = await channel.connect()
+        
+    audio_player.set_voice_client(vc)
 
     # Set up game tracking
     if not tracker.set_game_url(url):
@@ -67,7 +66,7 @@ async def watch(ctx, url: str):
     analyzer.reset()
     is_watching = True
     
-    await ctx.send(f"🎙️ **ChessCaster AI** has joined! Now tracking game ID: {tracker.game_id}")
+    await ctx.send("ChessCaster is now live.")
     
     if not poll_game_loop.is_running():
         poll_game_loop.start(ctx.channel)
@@ -102,6 +101,20 @@ async def analysis(ctx):
 async def score(ctx):
     """Alias for analysis."""
     await analysis(ctx)
+
+@bot.command(name='voice')
+async def set_voice(ctx, voice_name: str):
+    """Sets the commentator voice. Available: prabhat, neerja"""
+    global current_voice
+    voice_name = voice_name.lower()
+    if voice_name == "prabhat":
+        current_voice = "en-IN-PrabhatNeural"
+        await ctx.send("🎙️ Voice set to **Prabhat** (Male).")
+    elif voice_name == "neerja":
+        current_voice = "en-IN-NeerjaNeural"
+        await ctx.send("🎙️ Voice set to **Neerja** (Female).")
+    else:
+        await ctx.send("⚠️ Available voices: `prabhat`, `neerja`")
 
 @tasks.loop(seconds=3)
 async def poll_game_loop(text_channel):
@@ -138,7 +151,7 @@ async def poll_game_loop(text_channel):
                 commentary_text = await generate_commentary_text(event, state["white"], state["black"])
                 
                 # Generate Audio
-                audio_path = await generate_speech(commentary_text)
+                audio_path = await generate_speech(commentary_text, voice=current_voice)
                 
                 if audio_path:
                     audio_player.add_to_queue(audio_path)

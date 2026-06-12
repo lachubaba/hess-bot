@@ -74,7 +74,7 @@ async def generate_commentary_text(event: dict, white: str, black: str) -> str:
 import edge_tts
 from datetime import datetime
 
-async def generate_speech(text: str) -> str:
+async def generate_speech(text: str, voice: str = "en-IN-PrabhatNeural") -> str:
     """
     Uses Microsoft Edge TTS to convert text to speech.
     Returns the file path to the generated MP3 file.
@@ -84,8 +84,6 @@ async def generate_speech(text: str) -> str:
     
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"temp/commentary_{timestamp}_{uuid.uuid4().hex[:4]}.mp3"
-    
-    voice = "en-IN-PrabhatNeural"
     
     try:
         communicate = edge_tts.Communicate(text, voice)
