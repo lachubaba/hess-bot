@@ -18,8 +18,11 @@ class ChessTracker:
 
     def set_game_url(self, url: str) -> bool:
         """Parses the chess.com URL to extract the game ID."""
-        # e.g., https://www.chess.com/game/live/123456789 or https://www.chess.com/live/game/123456789
-        match = re.search(r'(?:live/game|game/live)/(\d+)', url)
+        # Supports:
+        # https://www.chess.com/game/live/{game_id}
+        # https://www.chess.com/live/game/{game_id}
+        # https://www.chess.com/game/{game_id}
+        match = re.search(r'chess\.com/(?:live/game|game/live|game)/(\d+)', url)
         if match:
             self.game_id = match.group(1)
             self.last_move_count = 0
