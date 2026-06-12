@@ -152,17 +152,61 @@ async def debuggame(ctx, url: str):
         return
     
     game_url = getattr(temp_tracker, "full_game_url", f"https://www.chess.com/game/live/{temp_tracker.game_id}")
-    await ctx.send(f"**Game ID**: {temp_tracker.game_id}\n**Endpoint**: {game_url}")
     
     try:
         import aiohttp
+        import re
         async with aiohttp.ClientSession() as session:
             async with session.get(game_url, headers=temp_tracker.headers) as resp:
                 status = resp.status
-                body = await resp.text()
-                snippet = body[:500].replace('`', '')
+                html = await resp.text()
                 
-                await ctx.send(f"**Status**: {status}\n**Body Snippet**:\n```html\n{snippet}\n```")
+                # Save to file
+                with open("debug_html.txt", "w", encoding="utf-8") as f:
+                    f.write(html)
+                    
+                # Extract
+                white_match = re.search(r'\{"color":"white","username":"([^"]+)"', html) or re.search(r'"whitePlayer":\{.*?"username":"([^"]+)"', html)
+                white = white_match.group(1) if white_match else "Unknown"
+                
+                black_match = re.search(r'\{"color":"black","username":"([^"]+)"', html) or re.search(r'"blackPlayer":\{.*?"username":"([^"]+)"', html)
+                black = black_match.group(1) if black_match else "Unknown"
+                
+                move_match = re.search(r'"moveList":"([^"]*)"', html)
+                has_moveList = bool(move_match)
+                
+                pgn_match = re.search(r'\[Result ".*?"\].*?\n\n(.*?)(?:1-0|0-1|1/2-1/2|\*|$)', html, re.DOTALL)
+                # Fallback PGN regex for window.chesscom config
+                if not pgn_match:
+                    pgn_match = re.search(r'pgnHeaders":"(.*?)","', html)
+                    
+                has_pgn = bool(pgn_match)
+                pgn_length = len(pgn_match.group(1)) if has_pgn else 0
+                
+                moves = []
+                if move_match:
+                    moves = [m for m in move_match.group(1).split() if not re.match(r'^\d+\.+$', m) and m not in ('1-0', '0-1', '1/2-1/2', '*')]
+                elif pgn_match:
+                    # Clean up escaped newlines from JSON if present
+                    pgn_str = pgn_match.group(1).replace('\\n', ' ').replace('\n', ' ')
+                    moves = [m for m in pgn_str.split() if not re.match(r'^\d+\.+$', m) and m not in ('1-0', '0-1', '1/2-1/2', '*')]
+                
+                first_10 = " ".join(moves[:10]) if moves else "None"
+                
+                output = (
+                    f"**Game ID**: {temp_tracker.game_id}\n"
+                    f"**Endpoint**: {game_url}\n"
+                    f"**Status**: {status}\n"
+                    f"**White**: {white}\n"
+                    f"**Black**: {black}\n"
+                    f"**moveList Found**: {has_moveList}\n"
+                    f"**PGN Found**: {has_pgn} (Length: {pgn_length})\n"
+                    f"**Move Count**: {len(moves)}\n"
+                    f"**First 10 Moves**: {first_10}\n\n"
+                    f"*Raw HTML saved to `debug_html.txt` locally.*"
+                )
+                
+                await ctx.send(output)
     except Exception as e:
         await ctx.send(f"**Error**: {e}")
 
