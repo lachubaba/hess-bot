@@ -2,6 +2,7 @@ import chess
 import chess.engine
 import logging
 import os
+import shutil
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -10,7 +11,8 @@ logger = logging.getLogger('ChessCaster')
 class ChessAnalyzer:
     def __init__(self):
         self.board = chess.Board()
-        self.engine_path = "stockfish" # Relies on the binary being in the system PATH (installed via Docker)
+        # Automatically detect Stockfish binary location
+        self.engine_path = os.getenv("STOCKFISH_PATH") or shutil.which("stockfish") or "/usr/games/stockfish"
         self.engine = None
         self.last_eval = 0 # In centipawns from White's perspective
         
