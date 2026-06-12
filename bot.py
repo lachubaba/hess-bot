@@ -143,6 +143,29 @@ async def say(ctx, *, message: str):
     else:
         await ctx.send("Failed to generate speech.")
 
+@bot.command(name='debuggame')
+async def debuggame(ctx, url: str):
+    """Debugs the tracking logic for a chess.com URL."""
+    temp_tracker = ChessTracker()
+    if not temp_tracker.set_game_url(url):
+        await ctx.send("Invalid URL format.")
+        return
+    
+    game_url = getattr(temp_tracker, "full_game_url", f"https://www.chess.com/game/live/{temp_tracker.game_id}")
+    await ctx.send(f"**Game ID**: {temp_tracker.game_id}\n**Endpoint**: {game_url}")
+    
+    try:
+        import aiohttp
+        async with aiohttp.ClientSession() as session:
+            async with session.get(game_url, headers=temp_tracker.headers) as resp:
+                status = resp.status
+                body = await resp.text()
+                snippet = body[:500].replace('`', '')
+                
+                await ctx.send(f"**Status**: {status}\n**Body Snippet**:\n```html\n{snippet}\n```")
+    except Exception as e:
+        await ctx.send(f"**Error**: {e}")
+
 @tasks.loop(seconds=3)
 async def poll_game_loop(text_channel):
     """Background loop that polls chess.com and processes new moves."""

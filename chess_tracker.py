@@ -25,6 +25,7 @@ class ChessTracker:
         match = re.search(r'chess\.com/(?:live/game|game/live|game)/(\d+)', url)
         if match:
             self.game_id = match.group(1)
+            self.full_game_url = f"https://www.chess.com/game/live/{self.game_id}"
             self.last_move_count = 0
             logger.info(f"Tracking game ID: {self.game_id}")
             return True
@@ -32,13 +33,14 @@ class ChessTracker:
 
     async def poll_game_state(self) -> dict:
         """
-        Polls the unofficial chess.com live callback endpoint.
+        Polls the HTML of the main game page and extracts moves via Regex.
         Returns a dictionary with new moves if any, or None.
         """
         if not self.game_id:
             return None
 
-        url = f"https://www.chess.com/callback/live/game/{self.game_id}"
+        # Directly fetch the HTML page
+        url = getattr(self, "full_game_url", f"https://www.chess.com/game/live/{self.game_id}")
         try:
             async with aiohttp.ClientSession() as session:
                 logger.debug(f"Requesting URL: {url}")
@@ -48,35 +50,41 @@ class ChessTracker:
                         logger.error(f"Failed to fetch game state. URL: {url} | Status: {resp.status} | Body: {body_snippet}")
                         
                         if resp.status == 404:
-                            return {"error": "404 Not Found - The game URL might be invalid or the endpoint is deprecated."}
+                            return {"error": "404 Not Found - The game URL is invalid."}
                             
                         return None
                         
-                    data = await resp.json()
-                    game_data = data.get("game", {})
+                    html = await resp.text()
                     
-                    if not game_data:
-                        return None
-                        
                     # Extract players
-                    players = game_data.get("players", {})
-                    if "top" in players and "bottom" in players:
-                        # Chess.com callback usually returns top/bottom and indicates who is white/black
-                        for pos in ["top", "bottom"]:
-                            if players[pos].get("color") == "white":
-                                self.white_player = players[pos].get("username", "White")
-                            elif players[pos].get("color") == "black":
-                                self.black_player = players[pos].get("username", "Black")
+                    white_match = re.search(r'\{"color":"white","username":"([^"]+)"', html) or re.search(r'"whitePlayer":\{.*?"username":"([^"]+)"', html)
+                    if white_match:
+                        self.white_player = white_match.group(1)
+                        
+                    black_match = re.search(r'\{"color":"black","username":"([^"]+)"', html) or re.search(r'"blackPlayer":\{.*?"username":"([^"]+)"', html)
+                    if black_match:
+                        self.black_player = black_match.group(1)
                     
-                    # Extract moves
-                    move_list_str = game_data.get("moveList", "")
-                    # moveList is typically a string like "e4 e5 Nf3 Nc6"
-                    # But sometimes it's an array or heavily formatted. 
-                    # Assuming standard chess.com behavior (space-separated algebraic notation)
-                    moves = move_list_str.split() if isinstance(move_list_str, str) else move_list_str
+                    # Extract moveList
+                    move_match = re.search(r'"moveList":"([^"]*)"', html)
+                    moves = []
+                    is_over = False
                     
-                    if not isinstance(moves, list):
-                        moves = []
+                    if move_match:
+                        moves_str = move_match.group(1)
+                        raw_moves = moves_str.split()
+                        # Filter out move numbers like '1.' or '2...' or game results
+                        moves = [m for m in raw_moves if not re.match(r'^\d+\.+$', m) and m not in ('1-0', '0-1', '1/2-1/2', '*')]
+                    else:
+                        # Fallback to PGN parsing
+                        pgn_match = re.search(r'\[Result ".*?"\].*?\n\n(.*?)(?:1-0|0-1|1/2-1/2|\*|$)', html, re.DOTALL)
+                        if pgn_match:
+                            raw_moves = pgn_match.group(1).replace('\n', ' ').split()
+                            moves = [m for m in raw_moves if not re.match(r'^\d+\.+$', m) and m not in ('1-0', '0-1', '1/2-1/2', '*')]
+                    
+                    # Check if game is over
+                    if re.search(r'"isOver":true', html) or re.search(r'\[Result "(1-0|0-1|1/2-1/2)"\]', html):
+                        is_over = True
                         
                     current_count = len(moves)
                     new_moves = []
@@ -90,9 +98,9 @@ class ChessTracker:
                             "new_moves": new_moves,
                             "white": self.white_player,
                             "black": self.black_player,
-                            "is_over": game_data.get("isOver", False)
+                            "is_over": is_over
                         }
-                    elif game_data.get("isOver", False):
+                    elif is_over:
                         return {
                             "all_moves": moves,
                             "new_moves": [],
